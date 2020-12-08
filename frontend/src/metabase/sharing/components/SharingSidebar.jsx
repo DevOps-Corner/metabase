@@ -60,12 +60,51 @@ const CHANNEL_NOUN_PLURAL = {
 
 const Heading = ({ children }) => <h4>{children}</h4>;
 
+const cardsFromDashboard = dashboard => {
+  if (dashboard === undefined) {
+    return [];
+  }
+
+  return dashboard.ordered_cards.map(card => ({
+    id: card.card.id,
+    collection_id: card.card.collection_id,
+    description: card.card.description,
+    display: card.card.display,
+    name: card.card.name,
+    include_csv: false,
+    include_xls: false,
+    dashboard_card_id: card.id,
+    dashboard_id: dashboard.id,
+    parameter_mappings: [], // card.parameter_mappings, //TODO: this ended up as "[]" ?
+  }));
+};
+
+const nonTextCardsFromDashboard = dashboard => {
+  return cardsFromDashboard(dashboard).filter(card => card.display !== "text");
+};
+
+const cardsToPulseCards = (cards, pulseCards) => {
+  return cards.map(card => {
+    const pulseCard = pulseCards.find(pc => pc.id === card.id) || card;
+    return {
+      ...card,
+      include_csv: pulseCard.include_csv,
+      include_xls: pulseCard.include_xls,
+    };
+  });
+};
+
 const getEditingPulseWithDefaults = (state, props) => {
   const pulse = getEditingPulse(state, props);
   const dashboardWrapper = state.dashboard;
   if (!pulse.name) {
     pulse.name = dashboardWrapper.dashboards[dashboardWrapper.dashboardId].name;
   }
+  pulse.cards = cardsToPulseCards(
+    nonTextCardsFromDashboard(props.dashboard),
+    pulse.cards,
+  );
+
   return pulse;
 };
 
@@ -127,7 +166,7 @@ class SharingSidebar extends React.Component {
   };
 
   addChannel(type) {
-    const { pulse, formInput } = this.props;
+    const { dashboard, pulse, formInput } = this.props;
 
     const channelSpec = formInput.channels[type];
     if (!channelSpec) {
@@ -139,7 +178,7 @@ class SharingSidebar extends React.Component {
     const newPulse = {
       ...pulse,
       channels: pulse.channels.concat(channel),
-      cards: this.cardsFromDashboard(),
+      cards: cardsFromDashboard(dashboard),
     };
     this.setPulse(newPulse);
   }
@@ -166,23 +205,6 @@ class SharingSidebar extends React.Component {
         this.createSubscription();
       }
     }
-  }
-
-  cardsFromDashboard() {
-    const { dashboard } = this.props;
-
-    return dashboard.ordered_cards.map(card => ({
-      id: card.card.id,
-      collection_id: card.card.collection_id,
-      description: card.card.description,
-      display: card.card.display,
-      name: card.card.name,
-      include_csv: false,
-      include_xls: false,
-      dashboard_card_id: card.id,
-      dashboard_id: dashboard.id,
-      parameter_mappings: [], // card.parameter_mappings, //TODO: this ended up as "[]" ?
-    }));
   }
 
   onChannelPropertyChange(index, name, value) {
@@ -266,7 +288,9 @@ class SharingSidebar extends React.Component {
 
   editPulse = (pulse, channelType) => {
     this.setPulse(pulse);
-    this.setState({ editingMode: "add-edit-" + channelType });
+    this.setState({
+      editingMode: "add-edit-" + channelType,
+    });
   };
 
   formatHourAMPM(hour) {
@@ -463,7 +487,7 @@ class SharingSidebar extends React.Component {
 
   render() {
     const { editingMode } = this.state;
-    const { dashboard, pulse, formInput, pulseList, onCancel } = this.props;
+    const { pulse, formInput, pulseList, onCancel } = this.props;
 
     // protect from empty values that will mess this up
     if (formInput === null || pulse === null || pulseList === null) {
@@ -704,9 +728,7 @@ class SharingSidebar extends React.Component {
               </div>
             </div>
             <EmailAttachmentPicker
-              cards={dashboard.ordered_cards
-                .map(ocard => ocard.card)
-                .filter(card => card.display !== "text")}
+              cards={pulse.cards}
               pulse={pulse}
               setPulse={this.setPulse.bind(this)}
             />

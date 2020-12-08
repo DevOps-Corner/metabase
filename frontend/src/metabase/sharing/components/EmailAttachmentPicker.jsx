@@ -10,12 +10,20 @@ export default class EmailAttachmentPicker extends Component {
   constructor(props, context) {
     super(props, context);
 
-    this.state = { selectedCards: this.cardIds() };
-  }
+    const selectedCards = props.cards.filter(card => {
+      return card.include_csv || card.include_xls;
+    });
 
-  state = {
-    selectedCards: new Set(),
-  };
+    this.state = {
+      attachmentType: this.attachmentTypeFor(selectedCards),
+      selectedCardIds: new Set(
+        selectedCards.map(card => {
+          return card.id;
+        }),
+      ),
+    };
+    this.updatePulse();
+  }
 
   static propTypes = {
     pulse: PropTypes.object.isRequired,
@@ -28,35 +36,60 @@ export default class EmailAttachmentPicker extends Component {
     return new Set(this.props.cards.map(card => card.id));
   };
 
-  attachmentTypeValue = () => {
+  selectedCards = () => {
+    const { selectedCardIds } = this.state;
     const { pulse } = this.props;
 
-    if (pulse.cards.some(c => c.include_xls)) {
+    return pulse.cards.filter(card => selectedCardIds.has(card.id));
+  };
+
+  attachmentTypeFor = cards => {
+    if (cards.some(c => c.include_xls)) {
       return "xls";
-    } else if (pulse.cards.some(c => c.include_csv)) {
+    } else if (cards.some(c => c.include_csv)) {
       return "csv";
     } else {
       return null;
     }
   };
 
-  setAttachmentType = attachmentType => {
-    const { pulse, setPulse } = this.props;
+  attachmentTypeValue = () => {
+    return this.attachmentTypeFor(this.selectedCards());
+  };
 
-    setPulse({
-      ...pulse,
-      cards: pulse.cards.map(card => {
-        card.include_xls = attachmentType === "xls";
-        card.include_csv = attachmentType === "csv";
-        return card;
-      }),
+  setAttachmentType = newAttachmentType => {
+    this.setState(({ selectedCardIds }) => {
+      return {
+        attachmentType: newAttachmentType,
+        selectedCardIds,
+      };
     });
+    this.updatePulse();
+  };
+
+  updatePulse = () => {
+    console.log("pulse changed");
+    //    const { pulse, setPulse } = this.props;
+    //    const { attachmentType } = this.state;
+    //
+    //    setPulse({
+    //      ...pulse,
+    //      cards: this.selectedCards().map(card => {
+    //        card.include_xls = attachmentType === "xls";
+    //        card.include_csv = attachmentType === "csv";
+    //        return card;
+    //      }),
+    //    });
+  };
+
+  setAttachmentTypeFromUserInput = () => {
+    const existingValue = this.attachmentTypeValue();
+    this.setAttachmentType(existingValue || this.DEFAULT_ATTACHMENT_TYPE);
   };
 
   toggleAttach = includeAttachment => {
     if (includeAttachment) {
-      const existingValue = this.attachmentTypeValue();
-      this.setAttachmentType(existingValue || this.DEFAULT_ATTACHMENT_TYPE);
+      this.setAttachmentTypeFromUserInput();
     } else {
       this.setAttachmentType(null);
     }
@@ -71,41 +104,42 @@ export default class EmailAttachmentPicker extends Component {
   };
 
   onToggleCard = card => {
-    this.setState(({ selectedCards }) => {
+    this.setState(({ selectedCardIds }) => {
       const id = card.id;
-      if (selectedCards.has(id)) {
-        selectedCards.delete(id);
+      if (selectedCardIds.has(id)) {
+        selectedCardIds.delete(id);
       } else {
-        selectedCards.add(id);
+        selectedCardIds.add(id);
+        this.setAttachmentTypeFromUserInput();
       }
 
-      return { selectedCards };
+      this.updatePulse();
     });
   };
 
   onToggleAll = () => {
     const { cards } = this.props;
-    this.setState(({ selectedCards }) => {
-      if (this.areAllSelected(cards, selectedCards)) {
-        return { selectedCards: new Set() };
+
+    this.setState(({ selectedCardIds }) => {
+      if (this.areAllSelected(cards, selectedCardIds)) {
+        return { selectedCardIds: new Set() };
       } else {
-        return { selectedCards: this.cardIds() };
+        return { selectedCardIds: this.cardIds() };
       }
     });
+
+    this.updatePulse();
   };
 
   render() {
     const { cards } = this.props;
-    const { selectedCards } = this.state;
+    const { attachmentType, selectedCardIds } = this.state;
 
     return (
       <div>
-        <Toggle
-          value={this.attachmentTypeValue() != null}
-          onChange={this.toggleAttach}
-        />
+        <Toggle value={attachmentType != null} onChange={this.toggleAttach} />
 
-        {this.attachmentTypeValue() != null && (
+        {attachmentType != null && (
           <div>
             <div className="text-bold py2 flex justify-between align-center">
               <Radio
@@ -114,7 +148,7 @@ export default class EmailAttachmentPicker extends Component {
                   { name: "XLSX", value: "xls" },
                 ]}
                 onChange={this.setAttachmentType}
-                value={this.attachmentTypeValue()}
+                value={attachmentType}
               />
             </div>
             <div className="text-bold py2 flex justify-between align-center">
@@ -124,10 +158,10 @@ export default class EmailAttachmentPicker extends Component {
                   onClick={this.onToggleAll}
                 >
                   <StackedCheckBox
-                    checked={this.areAllSelected(cards, selectedCards)}
+                    checked={this.areAllSelected(cards, selectedCardIds)}
                     indeterminate={this.areOnlySomeSelected(
                       cards,
-                      selectedCards,
+                      selectedCardIds,
                     )}
                     className="mr1"
                   />
@@ -141,7 +175,7 @@ export default class EmailAttachmentPicker extends Component {
                     }}
                   >
                     <CheckBox
-                      checked={selectedCards.has(card.id)}
+                      checked={selectedCardIds.has(card.id)}
                       className="mr1"
                     />
                     {card.name}
